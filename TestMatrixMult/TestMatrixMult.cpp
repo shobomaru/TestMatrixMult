@@ -5,7 +5,7 @@
 
 //----- Configure -----
 
-// 
+// Enable IACA profiling
 //#define PROFIACA
 
 //----- Configure End -----
@@ -98,7 +98,6 @@ void checkCPU() {
     
     if( regs[ 1 ] & 0x00000020 ) puts( "support AVX2" );
     
-    
     puts("");
 }
 
@@ -189,12 +188,31 @@ static void NOINLINE mul32x4( const __m128 *v1, const __m128 *v2, __m128 *vout )
 
 static void mul32x8( const __m256 *v1, const __m256 *v2, __m256 *vout )
 {
-    for( int r = 0; r < 4; r++ ) {
+    const int ALIGN32 p1[ 8 ] = { 0, 0, 0, 0, 1, 1, 1, 1 };
+    const int ALIGN32 p2[ 8 ] = { 2, 2, 2, 2, 3, 3, 3, 3 };
+    const int ALIGN32 p3[ 8 ] = { 4, 4, 4, 4, 5, 5, 5, 5 };
+    const int ALIGN32 p4[ 8 ] = { 6, 6, 6, 6, 7, 7, 7, 7 };
+	const __m256i perm1 = _mm256_load_si256( reinterpret_cast< const __m256i* >( p1 ) );
+    const __m256i perm2 = _mm256_load_si256( reinterpret_cast< const __m256i* >( p2 ) );
+    const __m256i perm3 = _mm256_load_si256( reinterpret_cast< const __m256i* >( p3 ) );
+    const __m256i perm4 = _mm256_load_si256( reinterpret_cast< const __m256i* >( p4 ) );
+    for( int r = 0; r < 2; r++ ) {
+        __m256 a0 = _mm256_permutevar8x32_ps( v1[ r ], perm1 );
+        __m256 a1 = _mm256_permutevar8x32_ps( v1[ r ], perm2 );
+        __m256 a2 = _mm256_permutevar8x32_ps( v1[ r ], perm3 );
+        __m256 a3 = _mm256_permutevar8x32_ps( v1[ r ], perm4 );
+        
+        __m256 b0 = _mm256_mul_ps( a0, v2[ 0 ] );
+        __m256 b1 = _mm256_mul_ps( a1, v2[ 1 ] );
+        __m256 b2 = _mm256_mul_ps( a2, v2[ 0 ] );
+        __m256 b3 = _mm256_mul_ps( a3, v2[ 1 ] );
+        
+        __m256 c0 = _mm256_add_ps( b0, b1 );
+        __m256 c1 = _mm256_add_ps( b2, b3 );
+        __m256 d0 = _mm256_permute2f128_ps( c0, c1, _MM_SHUFFLE( 0, 2, 0, 0 ) );
+        __m256 d1 = _mm256_permute2f128_ps( c0, c1, _MM_SHUFFLE( 0, 3, 0, 1 ) );
+        vout[ r ] = _mm256_add_ps( d0, d1 );
     }
-}
-
-static void NOINLINE inv( const float *v, float *vout )
-{
 }
 
 int main(int argc, const char * argv[])
