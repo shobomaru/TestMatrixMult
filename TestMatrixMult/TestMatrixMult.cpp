@@ -1,11 +1,12 @@
 // TestMatrixMult.cpp
-//  4x4 Matrix Multiplication using SSE / AVX
+//  4x4 Matrix Multiplication using SSE1 / AVX2
 //  written by @shobomaru
 
 
 //----- Configure -----
 
 // Enable IACA profiling
+// Please change the project path before build.
 //#define PROFIACA
 
 //----- Configure End -----
@@ -14,18 +15,23 @@
 #include <iostream>
 #include <cassert>
 
-#define __AVX__
+//#define __AVX__
 #include <immintrin.h>
 
 #ifdef _MSC_VER
 #   define ALIGN32 __declspec( align( 32 ) )
-#elif
+#else
 #   define ALIGN32 __attribute__(( aligned( 32 ) ))
 #endif
 
 #ifdef PROFIACA
 #   include <iacaMarks.h>
-#   define NOINLINE __attribute(( noinline ))
+#   ifdef _MSC_VER
+#       define NOINLINE __declspec( noinline )
+#   else
+#       define NOINLINE __attribute(( noinline ))
+#   endif
+#   pragma comment( lib, "iacaLoader.lib" )
 #else
 #   define IACA_START
 #   define IACA_END
@@ -43,7 +49,7 @@ void checkCPU() {
     
     __cpuid( reinterpret_cast< int* >( regs ), index );
     
-#elif
+#else
     
     __asm__ __volatile__(
 #if defined(__x86_64__) || defined(_M_AMD64) || defined (_M_X64)
@@ -63,12 +69,12 @@ void checkCPU() {
     
 #endif
     
-    if( regs[ 3 ] & 0x02000000 ) puts( "support SSE" );
-    if( regs[ 3 ] & 0x04000000 ) puts( "support SSE2" );
-    if( regs[ 2 ] & 0x00000001 ) puts( "support SSE3" );
-    if( regs[ 2 ] & 0x00080000 ) puts( "support SSE4.1" );
-    if( regs[ 2 ] & 0x00100000 ) puts( "support SSE4.2" );
-    if( regs[ 2 ] & 0x10000000 ) puts( "support AVX" );
+    if( regs[ 3 ] & 0x02000000 ) std::cout << "support SSE" << std::endl;
+    if( regs[ 3 ] & 0x04000000 ) std::cout << "support SSE2" << std::endl;
+    if( regs[ 2 ] & 0x00000001 ) std::cout << "support SSE3" << std::endl;
+    if( regs[ 2 ] & 0x00080000 ) std::cout << "support SSE4.1" << std::endl;
+    if( regs[ 2 ] & 0x00100000 ) std::cout << "support SSE4.2" << std::endl;
+    if( regs[ 2 ] & 0x10000000 ) std::cout << "support AVX" << std::endl;
     
     index = 7;
     
@@ -76,7 +82,7 @@ void checkCPU() {
     
     __cpuidex( reinterpret_cast< int* >( regs ), index, 0 );
     
-#elif
+#else
     
     __asm__ __volatile__(
 #if defined(__x86_64__) || defined(_M_AMD64) || defined (_M_X64)
@@ -96,15 +102,15 @@ void checkCPU() {
     
 #endif
     
-    if( regs[ 1 ] & 0x00000020 ) puts( "support AVX2" );
+    if( regs[ 1 ] & 0x00000020 ) std::cout << "support AVX2" << std::endl;
     
-    puts("");
+    std::cout << std::endl;
 }
 
 static void trace( const float *v, int numr )
 {
     for( int r = 0; r < numr; r++ ) {
-		std::cout << "( " << v[ r * 4 + 0 ]
+        std::cout << "( " << v[ r * 4 + 0 ]
                 << ", " << v[ r * 4 + 1 ]
                 << ", " << v[ r * 4 + 2 ]
                 << ", " << v[ r * 4 + 3 ] << " )" << std::endl;
@@ -115,11 +121,11 @@ static void trace( const __m128 *v, int numr )
 {
     for( int r = 0; r < numr; r++ ) {
 #ifdef _MSC_VER
-		std::cout << "( " << v[ r ].m128_f32[ 0 ]
+        std::cout << "( " << v[ r ].m128_f32[ 0 ]
                 << ", " << v[ r ].m128_f32[ 1 ]
                 << ", " << v[ r ].m128_f32[ 2 ]
                 << ", " << v[ r ].m128_f32[ 3 ] << " )" << std::endl;
-#elif
+#else
         std::cout << "( " << v[ r ][ 0 ]
                 << ", " << v[ r ][ 1 ]
                 << ", " << v[ r ][ 2 ]
@@ -133,7 +139,7 @@ static void trace( const __m256 *v, int numr )
     assert( numr % 2 == 0 );
     for( int r = 0; r < numr / 2; r++ ) {
 #ifdef _MSC_VER
-		std::cout << "( " << v[ r ].m256_f32[ 0 ]
+        std::cout << "( " << v[ r ].m256_f32[ 0 ]
                 << ", " << v[ r ].m256_f32[ 1 ]
                 << ", " << v[ r ].m256_f32[ 2 ]
                 << ", " << v[ r ].m256_f32[ 3 ] << " )" << std::endl
@@ -141,7 +147,7 @@ static void trace( const __m256 *v, int numr )
                 << ", " << v[ r ].m256_f32[ 5 ]
                 << ", " << v[ r ].m256_f32[ 6 ]
                 << ", " << v[ r ].m256_f32[ 7 ] << " )" << std::endl;
-#elif
+#else
         std::cout << "( " << v[ r ][ 0 ]
                 << ", " << v[ r ][ 1 ]
                 << ", " << v[ r ][ 2 ]
@@ -186,13 +192,13 @@ static void NOINLINE mul32x4( const __m128 *v1, const __m128 *v2, __m128 *vout )
     }
 }
 
-static void mul32x8( const __m256 *v1, const __m256 *v2, __m256 *vout )
+static void NOINLINE mul32x8( const __m256 *v1, const __m256 *v2, __m256 *vout )
 {
     const int ALIGN32 p1[ 8 ] = { 0, 0, 0, 0, 1, 1, 1, 1 };
     const int ALIGN32 p2[ 8 ] = { 2, 2, 2, 2, 3, 3, 3, 3 };
     const int ALIGN32 p3[ 8 ] = { 4, 4, 4, 4, 5, 5, 5, 5 };
     const int ALIGN32 p4[ 8 ] = { 6, 6, 6, 6, 7, 7, 7, 7 };
-	const __m256i perm1 = _mm256_load_si256( reinterpret_cast< const __m256i* >( p1 ) );
+    const __m256i perm1 = _mm256_load_si256( reinterpret_cast< const __m256i* >( p1 ) );
     const __m256i perm2 = _mm256_load_si256( reinterpret_cast< const __m256i* >( p2 ) );
     const __m256i perm3 = _mm256_load_si256( reinterpret_cast< const __m256i* >( p3 ) );
     const __m256i perm4 = _mm256_load_si256( reinterpret_cast< const __m256i* >( p4 ) );
