@@ -233,7 +233,7 @@ int main(int argc, const char * argv[])
     trace( aout, 4 );
     
     std::cout << "SSE Transpose" << std::endl;
-    transpose( a1, aout );
+    transposeX4( x1, xout );
     trace( aout, 4 );
     
     return 0;
