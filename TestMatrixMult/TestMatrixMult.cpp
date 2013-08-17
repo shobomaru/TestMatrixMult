@@ -1,6 +1,31 @@
 // TestMatrixMult.cpp
-//  4x4 Matrix Multiplication using SSE1 / AVX2
-//  written by @shobomaru
+//  4x4 Matrix Manipulation using SSE1 / AVX2
+
+
+
+/* ----- LICENSE (The zlib/libpng License) ----- */
+
+// Copyright (c) 2013 shobomaru
+// 
+// This software is provided 'as-is', without any express or implied
+// warranty. In no event will the authors be held liable for any damages
+// arising from the use of this software.
+// 
+// Permission is granted to anyone to use this software for any purpose,
+// including commercial applications, and to alter it and redistribute it
+// freely, subject to the following restrictions:
+// 
+//    1. The origin of this software must not be misrepresented; you must not
+//    claim that you wrote the original software. If you use this software
+//    in a product, an acknowledgment in the product documentation would be
+//    appreciated but is not required.
+// 
+//    2. Altered source versions must be plainly marked as such, and must not be
+//    misrepresented as being the original software.
+// 
+//    3. This notice may not be removed or altered from any source
+//    distribution.
+
 
 
 //----- Configure -----
@@ -37,75 +62,6 @@
 #   define IACA_END
 #   define NOINLINE
 #endif
-
-void checkCPU() {
-    
-    // see Wikipedia "CPUID"
-    
-    unsigned int index = 1;
-    unsigned int regs[ 4 ];
-    
-#ifdef _MSC_VER
-    
-    __cpuid( reinterpret_cast< int* >( regs ), index );
-    
-#else
-    
-    __asm__ __volatile__(
-#if defined(__x86_64__) || defined(_M_AMD64) || defined (_M_X64)
-                         "pushq %%rbx     \n\t" /* save %rbx */
-#else
-                         "pushl %%ebx     \n\t" /* save %ebx */
-#endif
-                         "cpuid            \n\t"
-                         "movl %%ebx ,%[ebx]  \n\t" /* write the result into output var */
-#if defined(__x86_64__) || defined(_M_AMD64) || defined (_M_X64)
-                         "popq %%rbx \n\t"
-#else
-                         "popl %%ebx \n\t"
-#endif
-                         : "=a"(regs[0]), [ebx] "=r"(regs[1]), "=c"(regs[2]), "=d"(regs[3])
-                         : "a"(index));
-    
-#endif
-    
-    if( regs[ 3 ] & 0x02000000 ) std::cout << "support SSE" << std::endl;
-    if( regs[ 3 ] & 0x04000000 ) std::cout << "support SSE2" << std::endl;
-    if( regs[ 2 ] & 0x00000001 ) std::cout << "support SSE3" << std::endl;
-    if( regs[ 2 ] & 0x00080000 ) std::cout << "support SSE4.1" << std::endl;
-    if( regs[ 2 ] & 0x00100000 ) std::cout << "support SSE4.2" << std::endl;
-    if( regs[ 2 ] & 0x10000000 ) std::cout << "support AVX" << std::endl;
-    
-    index = 7;
-    
-#ifdef _MSC_VER
-    
-    __cpuidex( reinterpret_cast< int* >( regs ), index, 0 );
-    
-#else
-    
-    __asm__ __volatile__(
-#if defined(__x86_64__) || defined(_M_AMD64) || defined (_M_X64)
-                         "pushq %%rbx     \n\t" /* save %rbx */
-#else
-                         "pushl %%ebx     \n\t" /* save %ebx */
-#endif
-                         "cpuid            \n\t"
-                         "movl %%ebx ,%[ebx]  \n\t" /* write the result into output var */
-#if defined(__x86_64__) || defined(_M_AMD64) || defined (_M_X64)
-                         "popq %%rbx \n\t"
-#else
-                         "popl %%ebx \n\t"
-#endif
-                         : "=a"(regs[0]), [ebx] "=r"(regs[1]), "=c"(regs[2]), "=d"(regs[3])
-                         : "a"(index));
-    
-#endif
-    
-    if( regs[ 1 ] & 0x00000020 ) std::cout << "support AVX2" << std::endl;
-    
-    std::cout << std::endl;
-}
 
 static void trace( const float *v, int numr )
 {
@@ -173,7 +129,7 @@ static void NOINLINE mul( const float *v1, const float *v2, float *vout )
     }
 }
 
-static void NOINLINE mul32x4( const __m128 *v1, const __m128 *v2, __m128 *vout )
+static void NOINLINE mulX4( const __m128 *v1, const __m128 *v2, __m128 *vout )
 {
     for( int r = 0; r < 4; r++ ) {
         __m128 a0 = _mm_shuffle_ps( v1[ r ], v1[ r ], _MM_SHUFFLE( 0, 0, 0, 0 ) );
@@ -192,7 +148,7 @@ static void NOINLINE mul32x4( const __m128 *v1, const __m128 *v2, __m128 *vout )
     }
 }
 
-static void NOINLINE mul32x8( const __m256 *v1, const __m256 *v2, __m256 *vout )
+static void NOINLINE mulX8( const __m256 *v1, const __m256 *v2, __m256 *vout )
 {
     const int ALIGN32 p1[ 8 ] = { 0, 0, 0, 0, 1, 1, 1, 1 };
     const int ALIGN32 p2[ 8 ] = { 2, 2, 2, 2, 3, 3, 3, 3 };
@@ -221,10 +177,29 @@ static void NOINLINE mul32x8( const __m256 *v1, const __m256 *v2, __m256 *vout )
     }
 }
 
+static void NOINLINE transpose( const float *v1, float *vout )
+{
+    for( int r = 0; r < 4; r++ ) {
+        for( int c = 0; c < 4; c++ ) {
+            vout[ c * 4 + r ] = v1[ r * 4 + c ];
+        }
+    }
+}
+
+static void NOINLINE transposeX4( const __m128 *v1, __m128 *vout )
+{
+    __m128 a0 = _mm_unpacklo_ps( v1[ 0 ], v1[ 2 ] );
+    __m128 a1 = _mm_unpacklo_ps( v1[ 1 ], v1[ 3 ] );
+    __m128 a2 = _mm_unpackhi_ps( v1[ 0 ], v1[ 2 ] );
+    __m128 a3 = _mm_unpackhi_ps( v1[ 1 ], v1[ 3 ] );
+    vout[ 0 ] = _mm_unpacklo_ps( a0, a1 );
+    vout[ 1 ] = _mm_unpackhi_ps( a0, a1 );
+    vout[ 2 ] = _mm_unpacklo_ps( a2, a3 );
+    vout[ 3 ] = _mm_unpackhi_ps( a2, a3 );
+}
+
 int main(int argc, const char * argv[])
 {
-    checkCPU();
-    
     ALIGN32 float a1[ 16 ] = {
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
     };
@@ -246,13 +221,20 @@ int main(int argc, const char * argv[])
     trace( aout, 4 );
     
     std::cout << "SSE Mult" << std::endl;
-    mul32x4( x1, x2, xout );
+    mulX4( x1, x2, xout );
     trace( xout, 4 );
     
     std::cout << "AVX Mult" << std::endl;
-    mul32x8( y1, y2, yout );
+    mulX8( y1, y2, yout );
     trace( yout, 4 );
+    
+    std::cout << "Scalar Transpose" << std::endl;
+    transpose( a1, aout );
+    trace( aout, 4 );
+    
+    std::cout << "SSE Transpose" << std::endl;
+    transpose( a1, aout );
+    trace( aout, 4 );
     
     return 0;
 }
-
