@@ -198,6 +198,19 @@ static void NOINLINE transposeX4( const __m128 *v1, __m128 *vout )
     vout[ 3 ] = _mm_unpackhi_ps( a2, a3 );
 }
 
+static void NOINLINE transposeX8( const __m256 *v1, __m256 *vout )
+{
+    // Maybe slow than SSE
+    __m256 a0 = _mm256_unpacklo_ps( v1[ 0 ], v1[ 1 ] );
+    __m256 a1 = _mm256_unpackhi_ps( v1[ 0 ], v1[ 1 ] );
+    __m256 b0 = _mm256_permute2f128_ps( a0, a1, _MM_SHUFFLE( 0, 2, 0, 0 ) );
+    __m256 b1 = _mm256_permute2f128_ps( a0, a1, _MM_SHUFFLE( 0, 3, 0, 1 ) );
+    __m256 c0 = _mm256_unpacklo_ps( b0, b1 );
+    __m256 c1 = _mm256_unpackhi_ps( b0, b1 );
+    vout[ 0 ] = _mm256_permute2f128_ps( c0, c1, _MM_SHUFFLE( 0, 2, 0, 0 ) );
+    vout[ 1 ] = _mm256_permute2f128_ps( c0, c1, _MM_SHUFFLE( 0, 3, 0, 1 ) );
+}
+
 int main(int argc, const char * argv[])
 {
     ALIGN32 float a1[ 16 ] = {
@@ -216,7 +229,7 @@ int main(int argc, const char * argv[])
     __m256 y2[ 2 ] = { _mm256_load_ps( a2 ), _mm256_load_ps( a2 + 8 ) };
     __m256 yout[ 2 ];
     
-    std::cout << "Scalar Mult" << std::endl;
+    std::cout << "FPU Mult" << std::endl;
     mul( a1, a2, aout );
     trace( aout, 4 );
     
@@ -224,17 +237,21 @@ int main(int argc, const char * argv[])
     mulX4( x1, x2, xout );
     trace( xout, 4 );
     
-    std::cout << "AVX Mult" << std::endl;
+    std::cout << "AVX2 Mult" << std::endl;
     mulX8( y1, y2, yout );
     trace( yout, 4 );
     
-    std::cout << "Scalar Transpose" << std::endl;
+    std::cout << "FPU Transpose" << std::endl;
     transpose( a1, aout );
     trace( aout, 4 );
     
     std::cout << "SSE Transpose" << std::endl;
     transposeX4( x1, xout );
-    trace( aout, 4 );
+    trace( xout, 4 );
+    
+    std::cout << "AVX Transpose" << std::endl;
+    transposeX8( y1, yout );
+    trace( yout, 4 );
     
     return 0;
 }
